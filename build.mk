@@ -10,3 +10,15 @@ $(obj)/$(TARGET_NAME): $(g_targets)
 	@echo "Building image: $@ ($^)"
 	@cat $^ > $@
 	@echo "Image $@ is ready!"
+
+tmp/hdd.img:	$(obj)/$(TARGET_NAME)
+	@dd if=$< of=tmp/hdd.img conv=notrunc
+
+bochs: tmp/hdd.img tools/bochsrc.txt
+	@echo "running bochs emulator"
+	@bochs -qf tools/bochsrc.txt
+
+qemu: tmp/hdd.img
+	@echo "running qemu"
+	@qemu -hda tmp/hdd.img
+
