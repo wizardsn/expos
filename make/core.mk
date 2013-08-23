@@ -4,6 +4,16 @@
 # http://locklessinc.com/articles/makefile_tricks/
 #
 
+# Global lists of files
+# these lists are populated by build engine
+# they should be used in main Makefile to finish the build
+g_sources	:=
+g_objects	:=
+g_dyndeps	:=
+g_targets	:=
+g_srcdirs	:=
+g_cleans	:=
+
 # name of makefile in subdirectories
 subdir_make		:= build.mk
 # default target name
@@ -13,37 +23,32 @@ default_target	:= built-in.o
 step_in		:= make/step_in.mk
 step_out	:= make/step_out.mk
 
-# the per direcotry variables
-# the set of below variables are defined for each directory, they are saved
-# during step_in and step_out operations
+# direcotry specific variables
+# the set of below variables are defined for each directory to be unique
+# the are saved and restored during step_in and step_out operations
 #
-# objs	- list of objects in the directory to be linked in default build object
-# clean - file list to be cleaned (objs and custom targes are automaticaly add 
+# objs-y	- list of objects in the directory to be linked in default build object
+# cleans 	- file list to be cleaned (objs and custom targes are automaticaly add 
 #		  here)
-# targets - list of directory specific targets, custom targets
+# targets 	- list of directory specific targets, custom targets
 #
-step_vars	:= objs-y targets clean $(dir_flags)
+step_vars	:= objs-y targets cleans
 
 # directory specific build tools flags
-dir_flags	:= cflags-y ldflags-y asflags-y asmflags-y
+# these flags take affect for the whole directory
+#
+# cflags-y	- GNU C compiler flags
+# ldflags-y	- GNU linker flags
+# asflags-y	- GNU as assembeler flags
+# asmflags	- NASM/YASM assembler flags
+#
+dir_flags	:= asflags-y asmflags-y cflags-y ldflags-y 
 step_vars	+= $(dir_flags)
-
-# example of build.mk
-#
-# SUBDIRS := dir1 dir2 dir3
-# $(eval $(build_subdirs)
-#
-# objs := someobj.o
-# clean := somefile.log
-# targets := custom_tgt.bin
-#
-# objs-custom_tgt.bin := dep1.o dep2.o
-#
 
 # ****************************************
 
 # debug trace
-debug_print = $(if $(BUILD_DEBUG), $(shell echo "Process: Dir=$~ curdir=$~$(firstword $(1)) subdirs='$(SUBDIRS)' dirlist='$(dirlist)'" >> build.log), )
+debug_print = $(if $(BUILD_DEBUG), $(shell echo "Process: Dir=$~ curdir=$~$(firstword $(1)) subdirs='$(subdirs)' dirlist='$(dirlist)'" >> build.log), )
 
 # Process all subdirs step by step
 # This is the core of the build system
@@ -58,8 +63,10 @@ get_dirlist = $(debug_print) \
 		$(step_out) \
 		$(if $(rest), \
 			$(call get_dirlist,$(rest)),)
-scan_subdirs = $(if $(SUBDIRS), \
-		 $(eval dirlist:=$(SUBDIRS) $(dirlist)) $(call get_dirlist,$(SUBDIRS)),)
+
+scan_subdirs = $(if $(subdirs), \
+		 $(eval dirlist:=$(subdirs) $(dirlist))\
+		 $(call get_dirlist,$(subdirs)),)
 
 # processing function called in makefiles
 define build_subdirs
@@ -73,18 +80,15 @@ set_src = $(strip $(patsubst %/, %, $(1)))
 
 # set_obj:
 # prepare path for objects - under $(OUTDIR)
+# for root dir it would be . or $(OUTDIR)
 set_obj = $(strip $(if $(OUTDIR),\
 	$(patsubst %/, %, $(patsubst %/, %, $(OUTDIR))/$(1)),\
-	$(1)))
+	$(if $(1),$(1),.)))
 
 # init src and obj variables (usefull for main makefile)
 ~ :=
 src	:= $(call set_src,$~)
 obj := $(call set_obj,$(src))
-
-# srcdirs will contain visited directory list after processing
-srcdirs :=
-
 
 # Functions used for directory processing (see step_out)
 
@@ -102,9 +106,9 @@ dummy := \
 
 # add module to the list
 $(2) += $(1)
-clean += $(1)
+cleans += $(1)
 
-# check if object has submodules
+# check if object has submodules, otherwise add it to single_objects
 $(if $($(basename $(1))-y), \
 	$(eval $(call comp_obj_rule,$(1), $($(basename $(1))-y))), \
 	$(eval single_objects += $(1)))
@@ -120,13 +124,13 @@ dummy := \
 	$(shell echo "\ncom_obj_rule: $(1): $(2)" >> build.log ), \
 	)
 
-clean += $(2)
+# add all subobjects to cleans and single_objects
+cleans += $(2)
 single_objects += $(2)
 
 # obj.o:	sobj1.o sobj2.o
-#$(obj)/$(strip $(1)):	ldflags-y := -r
 $(obj)/$(strip $(1)): 	$(addprefix $(obj)/,$(2))
-	$$(call cmd_ld, $$@, -r $$^)
+	$$(cmd_ld) -r $$^ -o $$@
 endef
 
 # ****************************************
@@ -134,14 +138,13 @@ endef
 # dir_default_rule ( <dir_objects> )
 define dir_default_rule
 
-# add direcotry default target to global objects and cleans
+# add directory default target to global objects and cleans
 g_objects += $(obj)/$(default_target)
-clean += $(default_target)
+cleans += $(default_target)
 
 # dir_path/built-in.o: <dir_objects.o> ...
-#$(obj)/$(default_target): 	ldflags-y := -r
 $(obj)/$(default_target):	$(addprefix $(obj)/, $(1)) 
-	$$(call cmd_ld, $$@, -r $$^)
+	$$(cmd_ld) -r $$^ -o $$@
 endef
 
 # ****************************************
@@ -174,7 +177,7 @@ dummy := \
 	)
 
 g_targets += $(addprefix $(obj)/, $(strip $(1)))
-clean += $(strip $(1))
+cleans += $(strip $(1))
 
 tgt-objs:=
 $(if $(objs-y-$(1)),\
@@ -192,15 +195,15 @@ endef
 clear_name	= $(subst /,_,$(strip $(dir $(1))))
 
 # directory specific flags
-ASFLAGS_DIR		= $(asflags-y_$(call clear_name,$(1)))
-ASMFLAGS_DIR	= $(asmflags-y_$(call clear_name,$(1)))
-CFLAGS_DIR		= $(cflags-y_$(call clear_name,$(1)))
-LDFLAGS_DIR		= $(ldflags-y_$(call clear_name,$(1)))
+ASFLAGS_DIR		= $(asflags-y_$(call clear_name,$@))
+ASMFLAGS_DIR	= $(asmflags-y_$(call clear_name,$@))
+CFLAGS_DIR		= $(cflags-y_$(call clear_name,$@))
+LDFLAGS_DIR		= $(ldflags-y_$(call clear_name,$@))
 
 # file specific flags
-ASFLAGS_FILE	= $(ASFLAGS_$(notdir $(1)))
-ASMFLAGS_FILE	= $(ASMFLAGS_$(notdir $(1)))
-CFLAGS_FILE		= $(CFLAGS_$(notdir $(1)))
+ASFLAGS_FILE	= $(ASFLAGS_$(notdir $@))
+ASMFLAGS_FILE	= $(ASMFLAGS_$(notdir $@))
+CFLAGS_FILE		= $(CFLAGS_$(notdir $@))
 # it used only for auto rules as target specific variable
 LDFLAGS_FILE	= $(ldflags-y)
 
@@ -210,18 +213,15 @@ ASMFLAGS	= $(BUILD_ASMFLAGS) $(ASMFLAGS_DIR) $(ASMFLAGS_FILE)
 CFLAGS		= $(BUILD_CFLAGS) $(CFLAGS_DIR) $(CFLAGS_FILE)
 LDFLAGS		= $(BUILD_LDFLAGS) $(LDFLAGS_DIR) $(LDFLAGS_FILE)
 
-Q := $(if $(BUILD_DEBUG),@echo,)
-
 # build commands
-_as_cmd		= $(AS)	$(ASFLAGS) $(2) -c -o $(1)
-_asm_cmd	= $(ASM) $(ASMFLAGS) $(2) -o $(1)
-_cc_cmd		= $(CC) $(CFLAGS) $(2) -c -o $(1)
-_ld_cmd		= $(LD) $(LDFLAGS) $(2) -o $(1)
+_as_cmd		= $(AS)	$(ASFLAGS)
+_asm_cmd	= $(ASM) $(ASMFLAGS)
+_cc_cmd		= $(CC) $(CFLAGS)
+_ld_cmd		= $(LD) $(LDFLAGS)
 
-cmd_as		= @echo "\tAS\t$(1)"; echo $(_as_cmd) >> build.log;	$(_as_cmd)
-cmd_asm		= @echo "\tASM\t$(1)"; echo $(_asm_cmd) >> build.log;	$(_asm_cmd)
-cmd_cc		= @echo "\tCC\t$(1)"; echo $(_cc_cmd) >> build.log;	$(_cc_cmd)
-cmd_ld		= @echo "\tLD\t$(1)"; echo $(_ld_cmd) >> build.log;	$(_ld_cmd)
-
+cmd_as		= $(if $(BUILD_DEBUG),,@echo "\tAS\t$@";)$(_as_cmd)
+cmd_asm		= $(if $(BUILD_DEBUG),,@echo "\tASM\t$@";)$(_asm_cmd)
+cmd_cc		= $(if $(BUILD_DEBUG),,@echo "\tCC\t$@";)$(_cc_cmd)
+cmd_ld		= $(if $(BUILD_DEBUG),,@echo "\tCC\t$@";)$(_ld_cmd)
 
 

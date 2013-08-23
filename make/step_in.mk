@@ -11,10 +11,11 @@ $(foreach var, $(step_vars), \
 	$(eval $(var)_stack$(dstackp) := $($(var))) \
 	$(eval $(var) := )  )
 
-SUBDIRS :=
+# init subdirs
+subdirs :=
 
 # Build directory name - step in
-~ := $(strip $~$(firstword $(dirlist)))/
+~ := $(if $(dirlist),$(strip $~$(firstword $(dirlist)))/,)
 src := $(call set_src,$~)
 obj := $(call set_obj,$(src))
 

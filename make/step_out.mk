@@ -17,15 +17,14 @@ dummy := \
 	)
 
 # add current dir to $(srcdirs)
-srcdirs += $~
+g_srcdirs += $~
 
 # create output directory structure
 $(if $(OUTDIR), \
 	$(shell if [ ! -d $(obj) ]; then mkdir -p $(obj); fi),)
 
-# collect all simple objects into the variable
+# collect all simple objects (used internally)
 single_objects :=
-
 
 # objs handling:
 # walk through $(objs-y) defined in the directory and populate $(dir_objects)
@@ -60,7 +59,11 @@ $(foreach flags, $(dir_flags), \
 
 
 # Add dir clean files to global clean files
-cleanfiles += $(addprefix $(obj)/,$(clean))
+g_cleans += $(addprefix $(obj)/,$(cleans))
+
+# Add single objects to global list
+g_dyndeps += $(addprefix $(obj)/,$(addsuffix .d,$(single_objects)))
+
 
 # restore old context of the directory
 $(foreach var, $(step_vars), \
