@@ -1,4 +1,7 @@
 build.log
+docs
+downloads
+toolchain
 tools/hdd.img
 out
 tmp

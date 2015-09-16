@@ -26,7 +26,7 @@ ifneq "$(MAKECMDGOALS)" "clean"
 endif
 
 # clean files
-g_cleans	+= build.log
+g_cleans	+=
 
 # build system testing
 .PHONY: test
@@ -62,7 +62,7 @@ $(obj)/%.o: %.s
 	@rm	$@.p.d
 
 # NASM/YASM sources
-$(obj)/%.obj: %.asm
+$(obj)/%.o: %.asm
 	$(cmd_asm) -MD $@.p.d $< -o $@
 	@cp $@.p.d $@.d
 	@sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \

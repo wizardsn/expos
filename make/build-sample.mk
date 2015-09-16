@@ -11,7 +11,7 @@
 # cleans	:= somefile.log
 # targets	:= custom_tgt.bin
 # 
-# someobj-y	:= depa.o depb.o
+# someobj-y	:= depa.o depb.o $(src)/source_file $(obj)/custom_tgt.bin
 #
 # objs-y-custom_tgt.bin := dep1.o dep2.o
 # dep1-y	:= dep1_main.o dep1_lib.o

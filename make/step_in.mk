@@ -20,7 +20,7 @@ $(foreach var, $(dirsafe_vars), \
 subdirs :=
 
 # Build directory name - step in
-~ := $(if $(dirlist),$(strip $~$(firstword $(dirlist)))/,)
+~   := $(if $(dirlist),$(strip $~$(firstword $(dirlist)))/,)
 src := $(call set_src,$~)
 obj := $(call set_obj,$(src))
 

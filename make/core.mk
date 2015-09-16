@@ -7,35 +7,35 @@
 # Global lists of files
 # these lists are populated by build engine
 # they should be used in main Makefile to finish the build
-g_sources	:=
-g_objects	:=
+g_sources   :=
+g_objects   :=
 g_libraries :=
-g_dyndeps	:=
-g_targets	:=
-g_srcdirs	:=
-g_cleans	:=
+g_dyndeps   :=
+g_targets   :=
+g_srcdirs   :=
+g_cleans    := build.log
 
 # name of makefile in subdirectories
-subdir_make		:= build.mk
+subdir_make     := build.mk
 # default target name
-default_target	:= built-in.o
+default_target  := built-in.o
 
 # these files save and restore current build context
-step_in		:= make/step_in.mk
-step_out	:= make/step_out.mk
+step_in     := make/step_in.mk
+step_out    := make/step_out.mk
 
 # direcotry specific variables
 # the set of below variables are defined for each directory to be unique
 # and initialized with empty values
 # the are saved and restored during directory traversal
 #
-# objs-y	- list of objects in the directory to be linked in default build object
-# cleans 	- file list to be cleaned (objs and custom targes are automaticaly add 
+# objs-y    - list of objects in the directory to be linked in default build object
+# cleans    - file list to be cleaned (objs and custom targes are automaticaly add 
 #             here)
 # libs-y    - list of libraries to be added to final target
-# targets 	- list of directory specific targets, custom targets
+# targets   - list of directory specific targets, custom targets
 #
-step_vars	:= objs-y libs-y targets cleans
+step_vars   := objs-y libs-y targets cleans
 
 # these vars are like step_vars, but inherit the initial values from parent dir
 # can be used to override global configuration for the current directory
@@ -44,14 +44,14 @@ dirsafe_vars := DEBUG CC CPP AS ASM LD
 # directory specific build tools flags
 # these flags take affect for the whole directory
 #
-# cflags-y	 - GNU C compiler flags
+# cflags-y   - GNU C compiler flags
 # cppflags-y - GNU C++ compiler flags
-# ldflags-y	 - GNU linker flags
-# asflags-y	 - GNU as assembeler flags
-# asmflags	 - NASM/YASM assembler flags
+# ldflags-y  - GNU linker flags
+# asflags-y  - GNU as assembeler flags
+# asmflags   - NASM/YASM assembler flags
 #
-dir_flags	:= asflags-y asmflags-y cflags-y cppflags-y ldflags-y 
-step_vars	+= $(dir_flags)
+dir_flags   := asflags-y asmflags-y cflags-y cppflags-y ldflags-y 
+step_vars   += $(dir_flags)
 
 # ****************************************
 
@@ -113,65 +113,83 @@ set_obj = $(strip $(if $(OUTDIR),\
 
 # init src and obj variables (usefull for main makefile)
 ~ :=
-src	:= $(call set_src,$~)
+src := $(call set_src,$~)
 obj := $(call set_obj,$(src))
 
 # Functions used for directory processing (see step_out)
 
 # ****************************************
 # check if an object has submodules
-# obj_parse ( <obj> <list> )
+# obj_parse (<obj> <list>)
 # add finded objects to the list
 # obj-y := sobj1.o sobj2.o
 define obj_parse
 
 dummy := \
 	$(if $(BUILD_DEBUG), \
-	$(shell echo "\nobj_parse: $(1)" >> build.log ), \
-	)
+	$(shell echo "\nobj_parse: ($(1),$(2))" >> build.log ), )
 
-# add module to the list
+# add object module to the objs list and cleans
 $(2) += $(1)
-cleans += $(1)
 
 # check if object has submodules, otherwise add it to single_objects
-$(if $($(basename $(1))-y), \
-	$(eval $(call comp_obj_rule,$(1), $($(basename $(1))-y))), \
-	$(eval single_objects += $(1)))
+$(if $(filter %.o,$(1)), \
+	$(if $($(basename $(1))-y), \
+		$(eval $(call comp_obj_parse,$(1),$($(basename $(1))-y))), \
+		$(eval single_objects += $(1)) \
+		$(eval cleans += $(1)) \
+	) \
+,)
+endef
+
+# ****************************************
+# comp_obj_parse (<obj>, <objs + deps> )
+# obj-y := sobj1.o sobj2.o dep3
+define comp_obj_parse
+
+dummy := \
+	$(if $(BUILD_DEBUG), \
+	$(shell echo "\ncomp_obj_parse: ($(1), $(2))" >> build.log ), )
+
+# parse dep objects recursively, obj_deps is tricky saved, returned from obj_parse
+obj_deps :=
+$(foreach object, $(2), \
+	$(eval $(call obj_parse,$(object),obj_deps)) )
+
+$(if $(filter %.o,$(obj_deps)), \
+	$(eval $(call comp_obj_rule,$(1),$(filter %.o,$(obj_deps)))) )
+
+$(if $(filter-out %.o,$(obj_deps)), \
+	$(eval $(call comp_obj_deps_rule,$(1),$(filter-out %.o,$(obj_deps)))) )
 endef
 
 # ****************************************
 # Define rule for composite object:
-# comp_obj_rule ( <obj> <obj-deps> )
+# comp_obj_rule ( <obj> <sub_objs> )
 define comp_obj_rule
 
 dummy := \
 	$(if $(BUILD_DEBUG), \
-	$(shell echo "\ncom_obj_rule: $(1): $(2)" >> build.log ), \
-	)
+	$(shell echo "\ncom_obj_rule: $(obj)/$(strip $(1)): $(addprefix $(obj)/,$(strip $(2)))" >> build.log ), )
 
-# add all subobjects to cleans and single_objects
-cleans += $(2)
-single_objects += $(2)
-g_sources += $(2)
+cleans += $(1)
 
-# obj.o:	sobj1.o sobj2.o
-$(obj)/$(strip $(1)): 	$(addprefix $(obj)/,$(2))
-	$$(cmd_ld) -r $$^ -o $$@
+# obj.o:    sobj1.o sobj2.o
+$(obj)/$(strip $(1)):   $(addprefix $(obj)/,$(strip $(2)))
+	$$(cmd_ld) -o $$@ -r $$(filter %.o, $$^)
 endef
 
 # ****************************************
-# link dir objects into single file
-# dir_default_rule ( <dir_objects> )
-define dir_default_rule
+# Define rule for composite object:
+# comp_obj_deps_rule ( <obj> <obj-deps> )
+define comp_obj_deps_rule
 
-# add directory default target to global objects and cleans
-g_objects += $(obj)/$(default_target)
-cleans += $(default_target)
+dummy := \
+	$(if $(BUILD_DEBUG), \
+	$(shell echo "\ncom_obj_deps_rule: ($(1): $(src)/$(2))" >> build.log ), )
 
-# dir_path/built-in.o: <dir_objects.o> ...
-$(obj)/$(default_target):	$(addprefix $(obj)/, $(1)) 
-	$$(cmd_ld) -r $$^ -o $$@
+# obj.o: dep1 dep2
+$(obj)/$(strip $(1)):   $(strip $(2))
 endef
 
 # ****************************************
@@ -186,11 +204,26 @@ dummy := \
 	)
 
 # rule: custom_target: <custom_deps>
-$(obj)/$(strip $(1)):	$(addprefix $(obj)/,$(strip $(2)))
+$(obj)/$(strip $(1)):   $(addprefix $(obj)/,$(strip $(2)))
 endef
 
 # ****************************************
-# check if target objects is defined and parse them
+# add dependencies for custom target
+# target_deps_rule ( target <varname_of_deps> )
+# target-deps := <dep1> <dep2>
+define target_deps_rule
+
+dummy := \
+	$(if $(BUILD_DEBUG), \
+	$(shell echo "\ntarget_deps_rule: $(1): $(2)" >> build.log ), \
+	)
+
+# rule: custom_target: <custom_deps>
+$(obj)/$(srip $(1))):   $(strip $(2))
+endef
+
+# ****************************************
+# check if target objects are defined and parse them
 # target_obj_parse( <target> )
 # obj-y-<target> := obj1.o obj2.o ...
 # for composite objects separate rules are created
@@ -203,16 +236,23 @@ dummy := \
 	$(shell echo "\ntarget_obj_parse: $(1): $(objs-y-$(1))" >> build.log ), \
 	)
 
-g_targets += $(addprefix $(obj)/, $(strip $(1)))
+g_targets += $(addprefix $(obj)/,$(strip $(1)))
 cleans += $(strip $(1))
 
-tgt-objs:=
+tgt_objs:=
 $(if $(objs-y-$(1)),\
 	$(foreach object, $(objs-y-$(1)), \
-		$(eval $(call obj_parse,$(object),tgt-objs)) \
+		$(eval $(call obj_parse,$(object),tgt_objs)) \
 	) \
-	$(eval $(call target_rule,$(1), $(tgt-objs))),\
 )
+
+# handle object deps from obj dir
+$(if $(filter %.o,$(tgt_objs)), \
+	$(eval $(call target_rule,$(1),$(filter %.o,$(tgt_objs)))) )
+
+# other file deps as src dir
+$(if $(filter-out %.o,$(tgt_objs)), \
+	$(eval $(call target_deps_rule,$(1),$(filter-out %.o,$(tgt_objs)))) )
 endef
 
 
@@ -229,30 +269,30 @@ CPPFLAGS_DIR    = $(cflags-y_$(call clear_name,$@))
 LDFLAGS_DIR     = $(ldflags-y_$(call clear_name,$@))
 
 # file specific flags
-ASFLAGS_FILE	= $(ASFLAGS_$(notdir $@))
-ASMFLAGS_FILE	= $(ASMFLAGS_$(notdir $@))
-CFLAGS_FILE		= $(CFLAGS_$(notdir $@))
+ASFLAGS_FILE    = $(ASFLAGS_$(notdir $@))
+ASMFLAGS_FILE   = $(ASMFLAGS_$(notdir $@))
+CFLAGS_FILE     = $(CFLAGS_$(notdir $@))
 CPPFLAGS_FILE   = $(CFLAGS_$(notdir $@))
 # it used only for auto rules as target specific variable
-LDFLAGS_FILE	= $(LDFLAGS_$(notdir $@))
+LDFLAGS_FILE    = $(LDFLAGS_$(notdir $@))
 
 # full flags
-ASFLAGS		= $(BUILD_ASFLAGS) $(ASFLAGS_DIR) $(ASFLAGS_FILE)
-ASMFLAGS	= $(BUILD_ASMFLAGS) $(ASMFLAGS_DIR) $(ASMFLAGS_FILE)
-CFLAGS		= $(BUILD_CFLAGS) $(CFLAGS_DIR) $(CFLAGS_FILE)
+ASFLAGS     = $(BUILD_ASFLAGS)  $(ASFLAGS_DIR)  $(ASFLAGS_FILE)
+ASMFLAGS    = $(BUILD_ASMFLAGS) $(ASMFLAGS_DIR) $(ASMFLAGS_FILE)
+CFLAGS      = $(BUILD_CFLAGS)   $(CFLAGS_DIR)   $(CFLAGS_FILE)
 CPPFLAGS    = $(BUILD_CPPFLAGS) $(CPPFLAGS_DIR) $(CPPFLAGS_FILE)
-LDFLAGS		= $(BUILD_LDFLAGS) $(LDFLAGS_DIR) $(LDFLAGS_FILE)
+LDFLAGS     = $(BUILD_LDFLAGS)  $(LDFLAGS_DIR)  $(LDFLAGS_FILE)
 
 # build commands
-__cmd_as    = $(AS)	$(ASFLAGS)
+__cmd_as    = $(AS)  $(ASFLAGS)
 __cmd_asm   = $(ASM) $(ASMFLAGS)
-__cmd_cc    = $(CC) $(CFLAGS)
+__cmd_cc    = $(CC)  $(CFLAGS)
 __cmd_cpp   = $(CPP) $(CPPFLAGS)
-__cmd_ld    = $(LD) $(LDFLAGS)
+__cmd_ld    = $(LD)  $(LDFLAGS)
 
-cmd_as      = $(if $(BUILD_DEBUG),,@echo "\tAS\t$@";)$(__cmd_as)
-cmd_asm		= $(if $(BUILD_DEBUG),,@echo "\tASM\t$@";)$(__cmd_asm)
-cmd_cc      = $(if $(BUILD_DEBUG),,@echo "\tCC\t$@";)$(__cmd_cc)
-cmd_cpp     = $(if $(BUILD_DEBUG),,@echo "\tCPP\t$@";)$(__cmd_cpp)
-cmd_ld      = $(if $(BUILD_DEBUG),,@echo "\tLD\t$@";)$(__cmd_ld)
+cmd_as      = $(if $(BUILD_DEBUG),,@echo "\tAS\t$@";)  $(__cmd_as)
+cmd_asm     = $(if $(BUILD_DEBUG),,@echo "\tASM\t$@";) $(__cmd_asm)
+cmd_cc      = $(if $(BUILD_DEBUG),,@echo "\tCC\t$@";)  $(__cmd_cc)
+cmd_cpp     = $(if $(BUILD_DEBUG),,@echo "\tCPP\t$@";) $(__cmd_cpp)
+cmd_ld      = $(if $(BUILD_DEBUG),,@echo "\tLD\t$@";)  $(__cmd_ld)
 
