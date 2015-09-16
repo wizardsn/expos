@@ -11,6 +11,11 @@ $(foreach var, $(step_vars), \
 	$(eval $(var)_stack$(dstackp) := $($(var))) \
 	$(eval $(var) := )  )
 
+# init dir-safe vars from parent directory
+$(foreach var, $(dirsafe_vars), \
+	$(eval $(var)_stack$(dstackp) := $($(var))) \
+	$(eval $(var) := $($(var)))  )
+
 # init subdirs
 subdirs :=
 

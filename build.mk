@@ -1,17 +1,17 @@
 # We need to go deeper
-subdirs := boot kernel
-$(eval $(build_subdirs))
+subdirs := kernel
+$(call add_subdirs)
 
 # project target
 targets	:= $(TARGET_NAME)
 
 # project target rule
-$(obj)/$(TARGET_NAME): $(g_targets)
+$(obj)/$(TARGET_NAME): $(g_targets) $(g_objects)
 	@echo "Building image: $@ ($^)"
 	@cat $^ > $@
 	@echo "Image $@ is ready!"
 
-tmp/hdd.img:	$(obj)/$(TARGET_NAME)
+tmp/hdd.img: $(obj)/$(TARGET_NAME)
 	@dd if=$< of=tmp/hdd.img conv=notrunc
 
 bochs: tmp/hdd.img tools/bochsrc.txt

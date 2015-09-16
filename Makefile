@@ -1,7 +1,7 @@
 # Makefile
 
 .SUFFIXES:
-.SUFFIXES:	.c .o .asm .s
+.SUFFIXES: .o .asm .s .c .cpp
 
 # project specific configurations
 include	project.mk
@@ -14,15 +14,13 @@ include make/core.mk
 all:	target
 
 # process root dir - run build engine
-include $(step_in)
-include $(subdir_make)	# root dir makefile
-include $(step_out)
+$(call init_make)
 
 # project target should be defined after the engine
 .PHONY:	target
 target:	$(g_targets)
 
-# include generated dependencies
+# include generated dynamic dependencies
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(g_dyndeps)
 endif
@@ -30,13 +28,17 @@ endif
 # clean files
 g_cleans	+= build.log
 
-
 # build system testing
 .PHONY: test
 test:
+	@echo "Build params:"
+	@echo "CC  - $(__cmd_cc)"
+	@echo "CPP - $(__cmd_cpp)"
+	@echo
 	@echo "Build engine results:"
 	@echo "sources:\n$(g_sources)\n"
 	@echo "objects:\n$(g_objects)\n"
+	@echo "libraries:\n$(g_libraries)\n"
 	@echo "dyndeps:\n$(g_dyndeps)\n"
 	@echo "cleans:\n$(g_cleans)\n"
 	@echo "targets:\n$(g_targets)\n"
@@ -48,8 +50,6 @@ test:
 clean:
 #	@echo "cleaning..."
 	@rm -rf $(g_cleans) $(g_dyndeps)
-#	@rm -r  $(if $(OUTDIR), $(addprefix $(OUTDIR)/,$(g_srcdirs),)
-
 
 # pattern compilation rules
 # GNU as sources
@@ -69,10 +69,19 @@ $(obj)/%.obj: %.asm
 			-e '/^$$/ d' -e 's/$$/:/' < $@.p.d >> $@.d
 	@rm $@.p.d
 
-# GNU c cources
+# GNU c sources
 $(obj)/%.o: %.c
 	$(cmd_cc) -Wp,-MD,$@.p.d -c $< -o $@
 	@sed -e 's,^.*$(@F)*:,$@:,' < $@.p.d > $@.d
 	@sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
 			-e '/^$$/ d' -e 's/$$/:/' < $@.p.d >> $@.d
 	@rm	$@.p.d
+
+# GNU cpp sources
+$(obj)/%.o: %.cpp
+	$(cmd_cpp) -Wp,-MD,$@.p.d -c $< -o $@
+	@sed -e 's,^.*$(@F)*:,$@:,' < $@.p.d > $@.d
+	@sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
+			-e '/^$$/ d' -e 's/$$/:/' < $@.p.d >> $@.d
+	@rm	$@.p.d
+

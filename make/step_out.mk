@@ -7,10 +7,10 @@
 # directory objects and files, 
 # separete rules are created for composite objects and custom targets
 #
-# all prodused files  should be added to $(clean) variable for auto cleaning
+# all prodused files should be added to $(clean) variable for auto cleaning
 # 
 
-# debug prints
+# debug print
 dummy := \
 	$(if $(BUILD_DEBUG), \
 	$(shell echo "<<< make_after: stack[$(dstackp)]=$(dstack$(dstackp)) src='$(src)' obj='$(obj)'" >> build.log ), \
@@ -46,7 +46,7 @@ $(if $(dir_objects), \
 
 # custom target handling:
 # it is similar to $(objs-y) handling
-# for each custom target walks through objs-y-<target> including composite objects
+# for each custom target walk through objs-y-<target> including composite objects
 $(foreach tgt, $(targets), \
 	$(eval $(call target_obj_parse,$(tgt))))
 
@@ -58,15 +58,23 @@ $(foreach flags, $(dir_flags), \
 		$(eval $(flags)_$(call clear_name,$(obj)/) := $($(flags))), ) )
 
 
+# additional libraries handling:
+g_libraries += $(libs-y)
+
 # Add dir clean files to global clean files
 g_cleans += $(addprefix $(obj)/,$(cleans))
 
 # Add single objects to global list
 g_dyndeps += $(addprefix $(obj)/,$(addsuffix .d,$(single_objects)))
 
+# Add single objects to source list
+g_sources += $(addprefix $(src)/, $(single_objects))
 
 # restore old context of the directory
 $(foreach var, $(step_vars), \
+	$(eval $(var) := $($(var)_stack$(dstackp))) )
+
+$(foreach var, $(dirsafe_vars), \
 	$(eval $(var) := $($(var)_stack$(dstackp))) )
 
 # Restore directory name - step out
@@ -74,3 +82,4 @@ $(foreach var, $(step_vars), \
 src := $(call set_src,$~)
 obj := $(call set_obj,$(src))
 dstackp := $(basename $(dstackp))
+
